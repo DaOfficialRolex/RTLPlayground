@@ -176,6 +176,7 @@ bool send_counters(uint8_t phys_port) { (void)phys_port; return false; }
 void send_status(void) { }
 void send_vlan(uint16_t vlan) { (void)vlan; }
 void send_basic_info(void) { }
+void send_diag(void) { }
 void send_bandwidth(void) { }
 void send_storm(void) { }
 void send_isolation(void) { }
