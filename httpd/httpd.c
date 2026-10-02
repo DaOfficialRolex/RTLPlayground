@@ -878,9 +878,20 @@ void httpd_appcall(void)
 	print_byte(s->tstate);
 	write_char(' ');
 #endif
-	if(uip_connected()) {
+	/* uip_connected() is set only for the SYN that opens this connection, so
+	 * it is the start of a fresh one. uIP does not clear appstate when it
+	 * reuses the slot, and requiring TSTATE_CLOSED made a stale TSTATE_TX
+	 * swallow the new request in the ACK branch below (advancing o_idx/slen
+	 * for a response that was never served). Reset the transfer state, not
+	 * just the state machine. */
+	if (uip_connected()) {
 		dbg_string("Connected...\n");
 		s->tstate = TSTATE_NONE;
+		slen = 0;
+		o_idx = 0;
+		sent_len = 0;
+		cont_len = 0;
+		len_left = 0;
 		s->fw_reset_pending = 0; // explicitly initialize reused XDATA appstate
 	} else if (uip_closed()) {
 		dbg_string("Connection closed\n");
@@ -1014,6 +1025,10 @@ void httpd_appcall(void)
 		entry = find_entry(q);
 		dbg_string("Entry is: "); dbg_byte(entry); dbg_char('\n');
 		if (entry == 0xff) {
+			if (is_word(q, "/diag.json")) {
+				send_diag();
+				goto do_send;
+			}
 			if (!authenticated) {
 				dbg_string("Not authorized!\n");
 				send_unauthorized();

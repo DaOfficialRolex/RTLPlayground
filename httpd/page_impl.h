@@ -16,6 +16,7 @@ bool send_counters(uint8_t phys_port);
 void send_status(void);
 void send_vlan(uint16_t vlan);
 void send_basic_info(void);
+void send_diag(void);
 void send_bandwidth(void);
 void send_storm(void);
 void send_eee(void);
