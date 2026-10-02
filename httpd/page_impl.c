@@ -37,6 +37,10 @@ extern __xdata uint16_t cont_len;
 extern __xdata uint32_t cont_addr;
 extern __code const uint8_t * __code const hex;
 extern __xdata uip_ipaddr_t uip_hostaddr, uip_draddr, uip_netmask;
+extern volatile __xdata uint32_t ticks;
+extern __xdata uint32_t diag_loops;
+extern __xdata uint16_t diag_rx_poll;
+extern __xdata uint16_t diag_rx_resets;
 
 extern __xdata uint8_t sfr_data[4];
 extern __xdata uint8_t sfp_pins_last;
@@ -196,6 +200,14 @@ void counter_to_html(void)
 
 void send_sfp_info(uint8_t sfp)
 {
+	/* An empty cage has no EEPROM to answer. The CLI checks the detect pin
+	 * before it reads and this path has to as well: /information.json is the
+	 * first thing the web UI asks for after login, and it walks both slots on
+	 * every board, so without this the web reads a bus that has no device on
+	 * it while the CLI and handle_sfp() stay silent. */
+	if (sfp_pins_last & (0x1 << (sfp << 2)))
+		return;
+
 	// This loops over the Vendor-name, Vendor OUI, Vendor PN and Vendor rev ASCII fields
 	for (uint8_t i = 16; i < 64; i++) {
 		if (!(i & 0xf) && !sfp_read_block(sfp, i, 16))
@@ -286,6 +298,32 @@ void send_basic_info(void)
 	char_to_html('"');
 
 	char_to_html('}');
+}
+
+
+void send_diag(void)
+{
+	/* Deliberately not behind authentication: it exists for the case where
+	 * the web UI is the only window into the switch and logging in is part
+	 * of what is broken. Nothing here configures anything. */
+	slen = strtox(outbuf, HTTP_RESPONCE_JSON);
+	slen += strtox(outbuf + slen, "{\"ticks\":\"0x");
+	byte_to_html(ticks >> 24); byte_to_html(ticks >> 16);
+	byte_to_html(ticks >> 8); byte_to_html(ticks);
+	slen += strtox(outbuf + slen, "\",\"loops\":\"0x");
+	byte_to_html(diag_loops >> 24); byte_to_html(diag_loops >> 16);
+	byte_to_html(diag_loops >> 8); byte_to_html(diag_loops);
+	slen += strtox(outbuf + slen, "\",\"rx_poll\":");
+	itoa16_html(diag_rx_poll);
+	slen += strtox(outbuf + slen, ",\"rx_resets\":");
+	itoa16_html(diag_rx_resets);
+	slen += strtox(outbuf + slen, ",\"nic_sts\":\"0x");
+	reg_read(RTL837X_NIC_INT_STS);
+	byte_to_html(SFR_DATA_0);
+	slen += strtox(outbuf + slen, "\",\"nic_buf\":\"0x");
+	reg_read(RTL837X_REG_NIC_RX_BUFF_DATA);
+	byte_to_html(SFR_DATA_8); byte_to_html(SFR_DATA_0);
+	slen += strtox(outbuf + slen, "\"}");
 }
 
 
