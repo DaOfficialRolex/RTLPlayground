@@ -91,6 +91,10 @@ bool     stp_enabled;
 bool lldp_enabled;
 uint16_t lldp_logical_port_status;
 
+uint32_t diag_loops;
+uint16_t diag_rx_poll;
+uint16_t diag_rx_resets;
+volatile uint32_t ticks;
 
 uip_ipaddr_t uip_hostaddr, uip_draddr, uip_netmask;
 struct uip_eth_addr uip_ethaddr = { .addr = { 0x02, 0x11, 0x22, 0x33, 0x44, 0x55 } };
