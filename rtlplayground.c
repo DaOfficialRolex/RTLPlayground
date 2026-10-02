@@ -84,6 +84,23 @@ void crc16_bank1(__xdata uint8_t *v) __naked;
 
 __xdata uint8_t idle_ready;
 
+/* Diagnostics readable over the web without a login, for when no console is
+ * attached. diag_rx_poll counts ticks that found pending RX data while the
+ * NIC interrupt was silent, which is the wedge this is meant to catch. */
+__xdata uint32_t diag_loops;
+__xdata uint16_t diag_rx_poll;
+__xdata uint16_t diag_rx_resets;
+__xdata uint16_t rx_stall_ticks;
+#define RX_STALL_TICKS	1000	/* 5 s at SYS_TICK_HZ before the NIC is reset */
+
+/* Software deadman: while enabled, the main loop clears dm_ticks on every
+ * pass and the 200 Hz tick resets the chip if it is starved for DM_MAX_TICKS.
+ * The SoC has no hardware watchdog, so without this a wedged main loop keeps
+ * switching L2 with management dead until someone pulls the power. */
+#define DM_MAX_TICKS 2000	/* 10 s at SYS_TICK_HZ */
+volatile __xdata uint16_t dm_ticks;
+volatile __xdata uint8_t dm_enabled;
+
 __code const uint8_t ownIP[] = { 192, 168, 2, 2 };
 __code const uint8_t gatewayIP[] = { 192, 168, 2, 22};
 __code const uint8_t netmask[] = { 255, 255, 255, 0};
@@ -209,6 +226,18 @@ void isr_timer2(void) __interrupt(5)
 {
 	ticks++;
 	tick_pending = 1;
+
+	if (dm_enabled && ++dm_ticks >= DM_MAX_TICKS) {
+		/* Main loop starved: reset the chip with an inline SFR poke, no
+		 * calls out of the ISR. */
+		dm_ticks = 0;
+		SFR_REG_ADDR_U16 = RTL837X_REG_RESET;
+		SFR_DATA_24 = 0;
+		SFR_DATA_16 = 0;
+		SFR_DATA_8 = 0;
+		SFR_DATA_0 = 1;
+		SFR_EXEC_GO = SFR_EXEC_WRITE_REG;
+	}
 
 	// Clear TF2 & EXF2 by software
 	T2CON &= ~0xC0;
@@ -1212,11 +1241,44 @@ static void handle_tick(void)
 	lldp_tick();
 	health_phase(HEALTH_PH_LLDP);
 	cabletest_tick();
+
+	/* The main loop drains RX only when rx_irq is set, and the NIC can stop
+	 * raising that interrupt once its buffer is full: #517 covers the case
+	 * where it keeps raising it, this covers the case where it does not.
+	 * Read the fill level once per tick, drain whatever it holds, and if it
+	 * stays non-empty for RX_STALL_TICKS the NIC has stopped handing frames
+	 * over at all, so reset just the NIC. The TCP connection is already gone
+	 * by then, and a stuck buffer never clears on its own. */
+	reg_read(RTL837X_REG_NIC_RX_BUFF_DATA);
+	if (SFR_DATA_U16) {
+		if (!rx_irq) {
+			diag_rx_poll++;
+			rx_irq = 1;
+		}
+		if (++rx_stall_ticks >= RX_STALL_TICKS) {
+			__xdata uint16_t g = 0;
+
+			rx_stall_ticks = 0;
+			diag_rx_resets++;
+			reg_bit_set(RTL837X_REG_RESET, RESET_NIC_BIT);
+			do {
+				reg_read(RTL837X_REG_RESET);
+			} while ((SFR_DATA_0 & (1 << RESET_NIC_BIT)) && ++g);
+			nic_setup();
+			REG_SET(RTL837X_NIC_INT_MSK, NIC_INT_RXIE);
+			rx_irq = 0;
+			EX1 = 1;
+		}
+	} else {
+		rx_stall_ticks = 0;
+	}
 }
 
 
 void idle(void)
 {
+	diag_loops++;
+	dm_ticks = 0;	/* deadman: the main loop is alive */
 	if (!evflags)
 		PCON |= 1;
 	health_loop_start();
@@ -1743,6 +1805,8 @@ void main(void)
 	timer_set(&second, SYS_TICK_HZ);
 	timer_set(&sfp_poll, SFP_TICK_STEP);
 	idle_ready = 1;
+	dm_ticks = 0;
+	dm_enabled = 1;
 
 	set_sys_led_state(SYS_LED_ON);
 

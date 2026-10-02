@@ -103,6 +103,7 @@ bool sfp_read_block(uint8_t slot, uint8_t reg, uint8_t len) __banked __reentrant
 {
 	uint8_t dev;
 	uint8_t val;
+	uint16_t guard;
 
 	len--;
 	if (len > 15)
@@ -118,8 +119,18 @@ bool sfp_read_block(uint8_t slot, uint8_t reg, uint8_t len) __banked __reentrant
 		  (dev >> 5) | machine.sfp_port[slot].i2c,
 		  ((dev << 3) & 0xff) | 0x1);
 
+	/* The bus runs to a part the switch does not own. A module that holds
+	 * the clock line, or an empty way, can leave the completion bit set for
+	 * ever, and with no bound here that is the whole management plane gone
+	 * (both the CLI and /information.json reach this). Give the transfer a
+	 * bounded number of polls and let the existing error path answer it:
+	 * 65536 register reads is a fraction of a second, and every caller
+	 * already treats false as a failed transfer. */
+	guard = 0;
 	do {
 		reg_read(RTL837X_REG_I2C_CTRL);
+		if (++guard == 0)
+			return false;
 	} while (SFR_DATA_0 & 0x1);
 
 	if (SFR_DATA_0 & 0x2)
