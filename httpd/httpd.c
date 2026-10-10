@@ -1025,10 +1025,6 @@ void httpd_appcall(void)
 		entry = find_entry(q);
 		dbg_string("Entry is: "); dbg_byte(entry); dbg_char('\n');
 		if (entry == 0xff) {
-			if (is_word(q, "/diag.json")) {
-				send_diag();
-				goto do_send;
-			}
 			if (!authenticated) {
 				dbg_string("Not authorized!\n");
 				send_unauthorized();
