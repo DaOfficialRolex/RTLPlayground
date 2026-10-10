@@ -489,6 +489,9 @@ button.danger{background:var(--bad);color:#fff;border-color:transparent}
         <div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap">
           <button class="ctl" id="cfgreload" data-i18n="sy_reload">Reload from flash</button>
           <button class="ctl pri" id="cfgwrite" data-i18n="sy_write">Write to flash</button>
+          <button class="ctl" id="cfgbackup" data-i18n="sy_backup" data-i18n-t="sy_backup_t">Back up</button>
+          <button class="ctl" id="cfgrestore" data-i18n="sy_restore" data-i18n-t="sy_restore_t">Restore...</button>
+          <input type="file" id="cfgfile" accept=".txt,text/plain" style="display:none">
           <span class="small mut" style="align-self:center" data-i18n="sy_unknown_note">Unknown lines are highlighted before writing.</span>
         </div>
       </div>
