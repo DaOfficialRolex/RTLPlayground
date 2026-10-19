@@ -136,6 +136,7 @@ SRCS = \
 	ntp_cli.c \
 	syslog.c \
 	timer.c \
+	cfgpass.c \
 	udp_apps.c \
 	crypto/chacha20.c
 
