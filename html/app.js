@@ -303,7 +303,8 @@ var LANG = {
         sy_reload: "Reload from flash",
         sy_write: "Write to flash",
         sy_backup: "Back up",
-        sy_backup_t: "Download the startup configuration as a file (it includes the admin password in plain text)",
+        sy_backup_t: "Download the startup configuration as a file",
+        sy_backup_pw: "The file contains the admin password in plain text: keep it safe",
         sy_restore: "Restore...",
         sy_restore_t: "Load a saved configuration file; it is shown for checking before it is written to flash",
         cw_restore_title: "Restore configuration",
@@ -639,7 +640,7 @@ var LANG = {
         sy_reload: "フラッシュから再読み込み",
         sy_write: "フラッシュに書き込み",
         sy_backup: "バックアップ",
-        sy_backup_t: "起動設定をファイルとしてダウンロード（管理者パスワードが平文で含まれます）",
+        sy_backup_t: "起動設定をファイルとしてダウンロード",
         sy_restore: "復元...",
         sy_restore_t: "保存した設定ファイルを読み込みます。フラッシュに書き込む前に確認のため表示されます",
         cw_restore_title: "設定の復元",
@@ -1007,7 +1008,7 @@ var LANG = {
         sy_reload: "从 Flash 重新读取",
         sy_write: "写入 Flash",
         sy_backup: "备份",
-        sy_backup_t: "将启动配置下载为文件（包含明文管理员密码）",
+        sy_backup_t: "将启动配置下载为文件",
         sy_restore: "恢复...",
         sy_restore_t: "加载已保存的配置文件；写入 Flash 前会显示以供检查",
         cw_restore_title: "恢复配置",
@@ -1342,7 +1343,7 @@ var LANG = {
         sy_reload: "Recargar desde flash",
         sy_write: "Escribir en flash",
         sy_backup: "Copia de seguridad",
-        sy_backup_t: "Descargar la configuración de inicio como archivo (incluye la contraseña de administrador en texto claro)",
+        sy_backup_t: "Descargar la configuración de inicio como archivo",
         sy_restore: "Restaurar...",
         sy_restore_t: "Cargar un archivo de configuración guardado; se muestra para revisarlo antes de escribirlo en flash",
         cw_restore_title: "Restaurar configuración",
@@ -1755,7 +1756,7 @@ var LANG = {
         sy_reload: "Recharger depuis la mémoire flash",
         sy_write: "Ecrire en mémoire flash",
         sy_backup: "Sauvegarder",
-        sy_backup_t: "Télécharger la configuration de démarrage dans un fichier (contient le mot de passe admin en clair)",
+        sy_backup_t: "Télécharger la configuration de démarrage dans un fichier",
         sy_restore: "Restaurer...",
         sy_restore_t: "Charger un fichier de configuration enregistré ; il est affiché pour vérification avant l'écriture en mémoire flash",
         cw_restore_title: "Restaurer la configuration",
@@ -2148,7 +2149,8 @@ var LANG = {
         sy_reload: "Aus dem Flash neu laden",
         sy_write: "In den Flash schreiben",
         sy_backup: "Sichern",
-        sy_backup_t: "Startkonfiguration als Datei herunterladen (enthält das Admin-Passwort im Klartext)",
+        sy_backup_t: "Startkonfiguration als Datei herunterladen",
+        sy_backup_pw: "Die Datei enthält das Admin-Passwort im Klartext: sicher aufbewahren",
         sy_restore: "Wiederherstellen...",
         sy_restore_t: "Gespeicherte Konfigurationsdatei laden; sie wird vor dem Schreiben in den Flash zur Kontrolle angezeigt",
         cw_restore_title: "Konfiguration wiederherstellen",
@@ -4973,6 +4975,8 @@ $("cfgbackup").addEventListener("click", function() {
             URL.revokeObjectURL(a.href);
             a.remove()
         }, 1000);
+        // Firmware that hides the password leaves it out; older firmware does not
+        if (/^[ \t]*passwd[ \t]/m.test(x)) toast(t("sy_backup_pw"), "err");
     }).catch(function(e) {
         toast(e.message || String(e), "err")
     });
