@@ -9,6 +9,7 @@
 #include "timer.h"
 #include "sessions.h"
 #include "html_data.h"
+#include "cfgpass.h"
 
 // #define DEBUG
 #include "debug.h"
@@ -55,6 +56,8 @@ __xdata uint8_t boundary[72];
 #define CONFIG_UPLOAD_BUF (CONFIG_LEN + 384)
 __xdata uint8_t config_upload;
 __xdata uint8_t config_buf[CONFIG_UPLOAD_BUF];
+// Where config_take() found the uploaded configuration; cfgpass.c reads them
+__xdata uint16_t cfg_pos, cfg_body, cfg_end;
 // bytes buffered in config_buf so far (HTTP header, POST body, or a firmware
 // part header); accumulates across TCP segments
 __xdata uint16_t pre_acc;
@@ -352,7 +355,7 @@ __xdata uint8_t *scan_header(__xdata uint8_t * __xdata p)
 static uint8_t config_take(void)
 {
 	// #386: needs static, otherwise it still lands in SRAM/DSEG
-	static __xdata uint16_t cfg_pos, cfg_hdr, cfg_body, cfg_end, cfg_last, cfg_i;
+	static __xdata uint16_t cfg_hdr, cfg_last, cfg_i;
 	__xdata uint8_t cfg_bl, cfg_run;
 
 	cfg_bl = strlen_x(boundary);
@@ -402,6 +405,9 @@ static uint8_t config_take(void)
 					else if (++cfg_run >= CMD_BUF_SIZE - 1)
 						return 2;
 				}
+				// the web interface never sees the password: keep the running one
+				if (!cfgpass_keep_upload())
+					return 2;
 				config_buf[cfg_end] = 0;
 				flash_region.addr = CONFIG_START;
 				flash_sector_erase();
