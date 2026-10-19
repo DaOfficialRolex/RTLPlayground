@@ -18,6 +18,7 @@
 #include "page_impl.h"
 #include "syslog.h"
 #include "dhcp.h"
+#include "cfgpass.h"
 
 // #define DEBUG
 #include "debug.h"
@@ -1003,6 +1004,8 @@ found_end:
 	flash_region.len = valid_len;
 	flash_read_bulk(outbuf + slen);
 	slen += valid_len;
+	// the password stays out of what the web interface shows
+	cfgpass_hide_reply();
 }
 
 void send_cmd_log(void)
@@ -1020,6 +1023,8 @@ void send_cmd_log(void)
 			outbuf[slen++] = cmd_history[p];
 		p = (p + 1) & CMD_HISTORY_MASK;
 	}
+	// a password set from the console or the System page stays out of it
+	cfgpass_hide_reply();
 }
 
 
