@@ -72,6 +72,10 @@ struct machine_runtime machine_detected = { .isRTL8373 = RTLP_TEST_IS8373 };
 /* ---- firmware state the modules read or write ---- */
 uint8_t  outbuf[TCP_OUTBUF_SIZE];
 uint16_t slen;
+/* What cfgpass.c reads besides the reply: the password and the upload */
+char     passwd[21];
+uint8_t  config_buf[1];
+uint16_t cfg_pos, cfg_body, cfg_end;
 uint16_t management_vlan = 1;
 uint16_t cont_len;
 uint32_t cont_addr;
