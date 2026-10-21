@@ -1077,7 +1077,9 @@ static void scenario_split_method_names(void)
 
 static void scenario_config_upload(void)
 {
-	static const char expected[] = "hostname upload-test\nip 10.0.0.1\n";
+	/* The upload carries no "passwd" line, so the running password is put
+	 * first (cfgpass.c): the web interface never sees it, saving keeps it. */
+	static const char expected[] = "passwd 1234\nhostname upload-test\nip 10.0.0.1\n";
 	static const char body[] =
 		"--upload-boundary\r\n"
 		"Content-Disposition: form-data; name=\"file\"; filename=\"config.txt\"\r\n"
