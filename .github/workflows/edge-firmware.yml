@@ -1,0 +1,183 @@
+name: Edge switch firmware
+
+# Every few hours: assemble RTLPlayground fresh from upstream main + the
+# carried patches (latest version from their fork/PRs) + this branch's switch
+# configs and board files (see .github/edge/prepare.sh). When anything that
+# goes into the image changed since the last release, build one image and one
+# OEM installer per switch and publish a release whose notes say what changed.
+#
+# The assembled tree is then published as this branch (force-pushed), so
+# edge-switches always equals upstream main + carried patches + one commit
+# with our configs, board files and this workflow. Publishing needs the
+# repository secret SYNC_TOKEN: a fine-grained personal access token for this
+# repository with Contents and Workflows read/write. Without it, releases are
+# still built, but the branch is not updated.
+#
+# Edit configs/ on this branch as usual: the push starts a build, and the
+# change is carried into the republished branch.
+#
+# Scheduled runs need edge-switches to be the default branch of the fork.
+
+on:
+  schedule:
+    - cron: "23 */4 * * *"          # every 4 hours
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Build and release even if nothing changed
+        type: boolean
+        default: false
+  push:
+    branches: [edge-switches]
+    paths:
+      - "configs/**"
+      - "machine/**"
+      - ".github/edge/**"
+      - ".github/workflows/edge-firmware.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: edge-firmware
+  cancel-in-progress: false
+
+env:
+  UPSTREAM: logicog/RTLPlayground
+  # switch:board-target (machine/<target>.c in the assembled tree)
+  SWITCHES: >-
+    sw1:PCB_SWTG024AS_V2_1_1
+    sw2:LIANGUO_ZX_SWTGW215AS
+    sw3:PCB_SWTG018AS_V2_1_0
+    sw4:EDGE_SKS3200_8E1X
+  # files copied from this branch on top of upstream
+  OVERLAY: >-
+    configs
+    machine/PCB_SWTG024AS_V2_1_1.c machine/PCB_SWTG024AS_V2_1_1.h machine/PCB_SWTG024AS_V2_1_1_init.c
+    machine/EDGE_SKS3200_8E1X.c machine/EDGE_SKS3200_8E1X.h
+  # upstream boards our overlay/pinned boards derive from: flag their changes
+  BOARD_WATCH: >-
+    sw1:PCB_SWTG024AS_A_2_0_1
+    sw4:XIKESTOR_SKS3200_8E1X
+  # carried patches: a fork's patch branches ("auto" = the list that fork
+  # applies itself) and upstream PR numbers, each at its latest version
+  PATCH_FORK: brunoz78/RTLPlayground
+  PATCH_FORK_BRANCHES: auto
+  UPSTREAM_PRS: ""
+  # PRs whose updates should show up in the release notes
+  WATCH_PRS: "505 741"
+  KEEP_RELEASES: "12"
+
+jobs:
+  firmware:
+    runs-on: ubuntu-latest
+    container:
+      image: debian:trixie
+    defaults:
+      run:
+        shell: bash
+    env:
+      GH_TOKEN: ${{ github.token }}
+      WORK: ${{ github.workspace }}/work
+      LOCAL: ${{ github.workspace }}/local
+    steps:
+      - name: Install dependencies
+        run: |
+          apt-get update
+          apt-get install -y make gcc g++ bison flex libboost-dev patch bzip2 curl ca-certificates xxd python-is-python3 libjson-c-dev zlib1g-dev git gh
+
+      - uses: actions/checkout@v6
+        with:
+          path: local
+
+      - name: Assemble the source
+        id: prep
+        env:
+          HEAD_MSG: ${{ github.event.head_commit.message }}
+        run: |
+          git config --global --add safe.directory '*'
+          bash local/.github/edge/prepare.sh
+          status=$(cat "$WORK/status")
+          # A push by a person (configs edited) always builds; the bot's own
+          # republish ([edge-sync]) only builds if the fingerprint changed.
+          if [ "${{ inputs.force }}" = "true" ]; then status=changed; fi
+          if [ "${{ github.event_name }}" = "push" ] && ! grep -q '\[edge-sync\]' <<< "$HEAD_MSG"; then status=changed; fi
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          cat "$WORK/notes.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Restore the patched SDCC
+        if: steps.prep.outputs.status == 'changed'
+        uses: actions/cache@v4
+        with:
+          path: work/src/toolchain
+          key: sdcc-${{ hashFiles('work/src/sdcc/*') }}
+
+      - name: Host-side unit tests
+        if: steps.prep.outputs.status == 'changed'
+        run: make -C "$WORK/src/test"
+
+      - name: Build images and OEM installers
+        if: steps.prep.outputs.status == 'changed'
+        run: |
+          cd "$WORK/src"
+          UPV=$(awk '$1=="upstream"{print substr($3,1,7)}' "$WORK/manifest.txt")
+          mkdir -p "$WORK/dist"
+          for entry in $SWITCHES; do
+            sw=${entry%%:*}; m=${entry#*:}
+            make clean >/dev/null 2>&1 || true
+            rm -rf output/"$m" installer/output
+            make CI=1 MACHINE="$m" CONFIG="configs/$sw.txt" GIT_VERSION="$UPV"
+            cp output/"$m"/rtlplayground-*-"$m".bin "$WORK/dist/$sw-rtlplayground-$UPV-$m.bin"
+            make -C installer
+            cp installer/output/rtlplayground_oem_upgrade.bin "$WORK/dist/$sw-oem-installer-$UPV-$m.bin"
+          done
+          cd "$WORK/dist" && sha256sum *.bin > SHA256SUMS.txt && cat SHA256SUMS.txt
+
+      - name: Publish the assembled tree as edge-switches
+        id: branch
+        env:
+          SYNC_TOKEN: ${{ secrets.SYNC_TOKEN }}
+        run: |
+          cd "$WORK/src"
+          if [ "$(git rev-parse HEAD^{tree})" = "$(git -C "$LOCAL" rev-parse HEAD^{tree})" ]; then
+            echo "edge-switches already matches the assembled tree."
+            echo "sha=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+          elif [ -z "$SYNC_TOKEN" ]; then
+            echo "::warning::SYNC_TOKEN is not set: edge-switches was not updated to the assembled tree."
+            echo "sha=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+          else
+            git push --force "https://x-access-token:${SYNC_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:refs/heads/edge-switches
+            echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish the release
+        if: steps.prep.outputs.status == 'changed'
+        env:
+          TARGET_SHA: ${{ steps.branch.outputs.sha }}
+        run: |
+          UPV=$(awk '$1=="upstream"{print substr($3,1,7)}' "$WORK/manifest.txt")
+          tag="fw-$(date -u +%Y%m%d-%H%M)-$UPV"
+          {
+            echo "RTLPlayground for the edge switches, upstream \`$UPV\`."
+            echo
+            echo "| Switch | Model | Target | Mgmt IP |"
+            echo "|---|---|---|---|"
+            echo "| sw1 | Sodola SL902-SWTGW124AS (4+2, experimental profile) | \`PCB_SWTG024AS_V2_1_1\` | 192.168.1.3 |"
+            echo "| sw2 | XikeStor SKS3200M-5GPY1XF | \`LIANGUO_ZX_SWTGW215AS\` | 192.168.1.4 |"
+            echo "| sw3 | Sodola SL902-SWTGW218AS | \`PCB_SWTG018AS_V2_1_0\` | 192.168.1.5 |"
+            echo "| sw4 | XikeStor SKS3200-8E1X | \`EDGE_SKS3200_8E1X\` (pinned) | 192.168.1.9 |"
+            echo
+            echo "Update a switch already on RTLPlayground with its \`swN-rtlplayground-…bin\` on the Firmware page (settings are kept). The \`swN-oem-installer-…bin\` files are only for a switch still on its original firmware."
+            echo
+            cat "$WORK/notes.md"
+          } > "$WORK/release.md"
+          gh release create "$tag" "$WORK"/dist/*.bin "$WORK/dist/SHA256SUMS.txt" \
+            --repo "$GITHUB_REPOSITORY" --target "$TARGET_SHA" \
+            --title "Edge switch firmware ${tag#fw-}" --notes-file "$WORK/release.md"
+
+      - name: Prune old releases
+        if: steps.prep.outputs.status == 'changed'
+        run: |
+          gh release list --repo "$GITHUB_REPOSITORY" --limit 200 --json tagName,createdAt \
+            --jq '[.[] | select(.tagName | startswith("fw-"))] | sort_by(.createdAt) | reverse | .[(env.KEEP_RELEASES|tonumber):] | .[].tagName' |
+          while read -r t; do gh release delete "$t" --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes; done
