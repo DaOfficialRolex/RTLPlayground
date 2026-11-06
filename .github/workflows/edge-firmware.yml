@@ -69,8 +69,54 @@ env:
   KEEP_RELEASES: "12"
 
 jobs:
-  firmware:
+  # Cheap check on the plain runner (git and gh are preinstalled): assemble the
+  # tree and compare its fingerprint with the last release. The heavy build
+  # container only starts when something actually changed. Pushes made by
+  # this workflow itself ([edge-sync]) are skipped outright: the run that made
+  # them has already built and released.
+  check:
+    if: github.event_name != 'push' || !contains(github.event.head_commit.message, '[edge-sync]')
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      status: ${{ steps.prep.outputs.status }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      WORK: ${{ github.workspace }}/work
+      LOCAL: ${{ github.workspace }}/local
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          path: local
+
+      - name: Assemble the source and compare with the last release
+        id: prep
+        run: |
+          bash local/.github/edge/prepare.sh
+          status=$(cat "$WORK/status")
+          # A push by a person (configs edited) always builds.
+          if [ "${{ inputs.force }}" = "true" ]; then status=changed; fi
+          if [ "${{ github.event_name }}" = "push" ]; then status=changed; fi
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          cat "$WORK/notes.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep edge-switches equal to the assembled tree
+        if: steps.prep.outputs.status == 'unchanged'
+        env:
+          SYNC_TOKEN: ${{ secrets.SYNC_TOKEN }}
+        run: |
+          cd "$WORK/src"
+          if [ "$(git rev-parse HEAD^{tree})" = "$(git -C "$LOCAL" rev-parse HEAD^{tree})" ]; then
+            echo "Nothing changed; edge-switches already matches."
+          elif [ -n "$SYNC_TOKEN" ]; then
+            git push --force "https://x-access-token:${SYNC_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:refs/heads/edge-switches
+          fi
+
+  firmware:
+    needs: check
+    if: needs.check.outputs.status == 'changed'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
     container:
       image: debian:trixie
     defaults:
@@ -91,33 +137,21 @@ jobs:
           path: local
 
       - name: Assemble the source
-        id: prep
-        env:
-          HEAD_MSG: ${{ github.event.head_commit.message }}
         run: |
           git config --global --add safe.directory '*'
           bash local/.github/edge/prepare.sh
-          status=$(cat "$WORK/status")
-          # A push by a person (configs edited) always builds; the bot's own
-          # republish ([edge-sync]) only builds if the fingerprint changed.
-          if [ "${{ inputs.force }}" = "true" ]; then status=changed; fi
-          if [ "${{ github.event_name }}" = "push" ] && ! grep -q '\[edge-sync\]' <<< "$HEAD_MSG"; then status=changed; fi
-          echo "status=$status" >> "$GITHUB_OUTPUT"
           cat "$WORK/notes.md" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Restore the patched SDCC
-        if: steps.prep.outputs.status == 'changed'
         uses: actions/cache@v4
         with:
           path: work/src/toolchain
           key: sdcc-${{ hashFiles('work/src/sdcc/*') }}
 
       - name: Host-side unit tests
-        if: steps.prep.outputs.status == 'changed'
         run: make -C "$WORK/src/test"
 
       - name: Build images and OEM installers
-        if: steps.prep.outputs.status == 'changed'
         run: |
           cd "$WORK/src"
           UPV=$(awk '$1=="upstream"{print substr($3,1,7)}' "$WORK/manifest.txt")
@@ -151,7 +185,6 @@ jobs:
           fi
 
       - name: Publish the release
-        if: steps.prep.outputs.status == 'changed'
         env:
           TARGET_SHA: ${{ steps.branch.outputs.sha }}
         run: |
@@ -176,7 +209,6 @@ jobs:
             --title "Edge switch firmware ${tag#fw-}" --notes-file "$WORK/release.md"
 
       - name: Prune old releases
-        if: steps.prep.outputs.status == 'changed'
         run: |
           gh release list --repo "$GITHUB_REPOSITORY" --limit 200 --json tagName,createdAt \
             --jq '[.[] | select(.tagName | startswith("fw-"))] | sort_by(.createdAt) | reverse | .[(env.KEEP_RELEASES|tonumber):] | .[].tagName' |
