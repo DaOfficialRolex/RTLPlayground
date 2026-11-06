@@ -1,0 +1,14 @@
+hostname sw2
+ip 192.168.1.4
+netmask 255.255.255.0
+gw 192.168.1.1
+dns server 192.168.1.1
+vlan 1 1
+vlan 2 6
+vlan 4 1t 2 3 4 5
+pvid 2 4
+pvid 3 4
+pvid 4 4
+pvid 5 4
+pvid 6 2
+vlan 1 mgmt
