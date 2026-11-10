@@ -1,0 +1,7 @@
+#ifndef _MACHINE_EDGE_SL902_SWTGW218AS_H_
+#define _MACHINE_EDGE_SL902_SWTGW218AS_H_
+
+#define MACHINE_MODEL "Sodola SL902-SWTGW218AS"	// max 29 chars (machine_name[30])
+#define MACHINE_CHIPSET RTL8373
+
+#endif
