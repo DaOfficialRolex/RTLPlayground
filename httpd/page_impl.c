@@ -182,6 +182,14 @@ void counter_to_html(void)
 
 void send_sfp_info(uint8_t sfp)
 {
+	/* An empty cage has no EEPROM to answer. The CLI checks the detect pin
+	 * before it reads and this path has to as well: /information.json is the
+	 * first thing the web UI asks for after login, and it walks both slots on
+	 * every board, so without this the web reads a bus that has no device on
+	 * it while the CLI and handle_sfp() stay silent. */
+	if (sfp_pins_last & (0x1 << (sfp << 2)))
+		return;
+
 	// This loops over the Vendor-name, Vendor OUI, Vendor PN and Vendor rev ASCII fields
 	for (uint8_t i = 16; i < 64; i++) {
 		if (!(i & 0xf) && !sfp_read_block(sfp, i, 16))
