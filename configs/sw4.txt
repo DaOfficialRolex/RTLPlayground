@@ -1,0 +1,21 @@
+hostname sw4
+ip 192.168.1.9
+netmask 255.255.255.0
+gw 192.168.1.1
+dns server 192.168.1.1
+pvid 1 4
+pvid 2 3
+pvid 3 5
+pvid 4 2
+pvid 5 2
+pvid 6 2
+pvid 7 2
+pvid 9 2
+vlan 1 mgmt
+lldp on
+vlan 1 Management 8
+vlan 2 Untrusted 8t 4 5 6 7 9
+vlan 3 Trusted 8t 2
+vlan 4 IoT 8t 1
+vlan 5 Work 8t 3
+vlan 6 Guest 8t
