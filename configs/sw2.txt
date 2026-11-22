@@ -8,11 +8,11 @@ pvid 3 4
 pvid 4 4
 pvid 5 4
 pvid 6 2
-vlan 1 mgmt
 lldp on
-vlan 3 Trusted
-vlan 4 IoT 1t 2 3 4 5
 vlan 2 Untrusted 6
-vlan 1 Management 1
+vlan 3 Trusted
+vlan 4 IoT 1t 5 2 3 4
 vlan 5 Work
 vlan 6 Guest
+vlan 10 Management 1t
+vlan 10 mgmt

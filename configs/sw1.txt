@@ -7,11 +7,12 @@ dns server 192.168.1.1
 pvid 3 2
 pvid 4 4
 pvid 5 2
-vlan 1 mgmt
 lldp on
-vlan 1 Management 1 2 6
-vlan 2 Untrusted 1t 2t 6t 3 5
+vlan 2 Untrusted 1t 2t 6t 5 3
 vlan 3 Trusted 1t 2t 6t
 vlan 4 IoT 1t 2t 6t 4
 vlan 5 Work 1t 2t 6t
 vlan 6 Guest 1t 2t 6t
+vlan 10 Management 2t 6t 1
+pvid 1 10
+vlan 10 mgmt
