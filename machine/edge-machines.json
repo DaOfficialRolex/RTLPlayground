@@ -1,0 +1,12 @@
+[
+  {
+    "machine": "EDGE_SL902_SWTGW124AS",
+    "friendly_name": "SWTG024AS-V2.1.1_19023",
+    "pcb": "EDGE_SL902_SWTGW124AS"
+  },
+  {
+    "machine": "EDGE_SL902_SWTGW218AS",
+    "friendly_name": "Sodola SL902-SWTGW218AS",
+    "pcb": "EDGE_SL902_SWTGW218AS"
+  }
+]
